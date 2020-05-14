@@ -3,7 +3,6 @@ fbgen data writer functions
 """
 import numpy as np
 from tqdm import tqdm
-import astropy.constants as ac
 from blimpy.io.sigproc import generate_sigproc_header
 from fbgen_utilities import logger, oops
 
@@ -37,15 +36,16 @@ def populate_freqs_hz(arg_fbobj):
     freqs = foff * i_vals + first_freq
     return freqs
 
-def get_signal(arg_freqs, arg_low, arg_high):
+def get_signal(arg_freqs, arg_et, arg_low, arg_high):
     """
     Build and return to caller a signal array based on
-    a frequency array, lowest data value, and the higherst data value.
+    a frequency array, elapsed time, lowest data value, and the higherst data value.
+
     The form of the signal is a sine wave.
     """
     amplitude = 0.5 * (arg_high - arg_low)
     mid = arg_low + amplitude
-    return mid + amplitude * np.sin((arg_freqs / ac.c.value) / TWO_PI)
+    return amplitude * np.sin(arg_freqs * arg_et) + mid
 
 def get_noisy(arg_signal, arg_max_noise, arg_rfactor):
     """Make the signal noisy"""
@@ -53,14 +53,17 @@ def get_noisy(arg_signal, arg_max_noise, arg_rfactor):
 
 def write_data(arg_fbobj, out_path, out_fwobj):
     """Write the data block for each sample. """
+    tsamp = arg_fbobj.header["tsamp"]
     freqs = populate_freqs_hz(arg_fbobj)
-    rfactor = np.random.default_rng().uniform(0, 1, len(freqs))
+    len_freqs = len(freqs)
     logger("write_data: #freqs = {}, #samples = {}, low = {:e}, high = {:e}"
            .format(len(freqs), arg_fbobj.t_end, arg_fbobj.signal_low, arg_fbobj.signal_high))
+    et = 0.0
     for ndx in tqdm(range(arg_fbobj.t_end), desc="Writing ...", unit=" (channel-blocks)"):
-        signal = get_signal(freqs, arg_fbobj.signal_low, arg_fbobj.signal_high)
+        signal = get_signal(freqs, et, arg_fbobj.signal_low, arg_fbobj.signal_high)
         if DEBUGGING:
             print("\nDEBUG low={}, high={}, signal:\n{}".format(arg_fbobj.signal_low, arg_fbobj.signal_high, signal))
+        rfactor = np.random.uniform(-0.5, 0.5, len_freqs)
         noisy64 = get_noisy(signal, arg_fbobj.max_noise, rfactor)
         if DEBUGGING:
             print("DEBUG noisy64:", noisy64)
@@ -78,6 +81,7 @@ def write_data(arg_fbobj, out_path, out_fwobj):
         except Exception as err:
             oops("write_data: write({}) block #{} failed, reason: {}"
                  .format(ndx, out_path, repr(err)))
+        et += tsamp
     print("\n")
 
 if __name__ == "__main__":
