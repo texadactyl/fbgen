@@ -1,5 +1,5 @@
 """
-Generate a filterbank or h5 file conditioned on a configuration file.
+Generate a filterbank file conditioned on a configuration file.
 """
 
 
