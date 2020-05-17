@@ -3,7 +3,6 @@ fbgen data writer functions
 """
 import numpy as np
 from tqdm import tqdm
-from astropy.constants import c
 from blimpy.io.sigproc import generate_sigproc_header
 from fbgen_utilities import logger, oops
 
@@ -46,7 +45,7 @@ def get_signal(arg_freqs, arg_et, arg_low, arg_high):
     """
     amplitude = 0.5 * (arg_high - arg_low)
     mid = arg_low + amplitude
-    return amplitude * np.sin((TWO_PI * arg_freqs * arg_et) / c.value) + mid
+    return amplitude * np.sin(arg_freqs * arg_et) + mid
 
 def get_noisy(arg_signal, arg_max_noise, arg_rfactor):
     """Make the signal noisy"""
