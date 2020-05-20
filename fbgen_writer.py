@@ -32,7 +32,7 @@ def populate_freqs_hz(arg_fbobj):
         first_freq = arg_fbobj.f_end * 1e6
     else:
         first_freq = arg_fbobj.f_begin * 1e6
-    i_vals = np.arange(arg_fbobj.chan_start_idx, arg_fbobj.chan_stop_idx + 1)
+    i_vals = np.arange(arg_fbobj.chan_start_idx, arg_fbobj.chan_stop_idx)
     freqs = foff * i_vals + first_freq
     return freqs
 
