@@ -121,6 +121,7 @@ class FilterbankObject:
             self.signal_low = get_config_float(config, section, "signal_low")
             self.signal_high = get_config_float(config, section, "signal_high")
             self.max_noise = get_config_float(config, section, "max_noise")
+            self.max_freq_write = get_config_int(config, section, "max_freq_write")
 
         except Exception as err:
             oops("get_config: Trouble with config file {}, reason: {}"

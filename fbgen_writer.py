@@ -1,6 +1,7 @@
 """
 fbgen data writer functions
 """
+import sys
 from math import floor
 import numpy as np
 from tqdm import tqdm
@@ -19,22 +20,20 @@ def write_header(arg_fbobj, out_path, out_fwobj):
         oops("write_header: write({}) failed, reason: {}"
              .format(out_path, repr(err)))
 
-def generate_freqs_hz(arg_fbobj):
+def generate_freqs_hz(arg_fbegin, arg_fcount, arg_foff):
     """
     Based on the channel indices, construct a frequency array
     and return it to caller.  Units are Hz, not MHz.
 
     if the frequency interval (foff) is negative,
-    then a decreasing value order is used i.e. f_end is the first;
-    else an increasing value order is used i.e. f_begin is the first.
+    then a decreasing value order is used;
+    else an increasing value order is used.
     """
-    foff = arg_fbobj.header['foff'] * 1e6
-    if foff < 0:
-        first_freq = arg_fbobj.f_end * 1e6
-    else:
-        first_freq = arg_fbobj.f_begin * 1e6
-    i_vals = np.arange(0, arg_fbobj.header['nchans'])
-    freqs = foff * i_vals + first_freq
+    ix_vals = np.arange(0, arg_fcount)
+    freqs = arg_foff * ix_vals + arg_fbegin
+    if DEBUGGING:
+        len_freqs = len(freqs)
+        print("DEBUG generate_freqs_hz len, freqs:", len_freqs, freqs)
     return freqs
 
 def get_signal(arg_freqs, arg_et, arg_low, arg_high):
@@ -55,38 +54,56 @@ def get_noisy(arg_signal, arg_max_noise, arg_rfactor):
 def write_data(arg_fbobj, out_path, out_fwobj):
     """Write the data block for each sample. """
     tsamp = arg_fbobj.header["tsamp"]
-    freqs = generate_freqs_hz(arg_fbobj)
-    len_freqs = len(freqs)
+    foff = arg_fbobj.header["foff"]
+    len_all_freqs = arg_fbobj.header['nchans']
     n_bytes = floor(arg_fbobj.header['nbits'] / 8)
-    logger("write_data: #freqs = {}, #samples = {}, low = {:e}, high = {:e}"
-           .format(len(freqs), arg_fbobj.t_end, arg_fbobj.signal_low, arg_fbobj.signal_high))
+    max_freq_write = arg_fbobj.max_freq_write
+    logger("write_data: #samples = {}, #freqs = {}, low = {:e}, high = {:e}"
+           .format(arg_fbobj.t_end, len_all_freqs, arg_fbobj.signal_low, arg_fbobj.signal_high))
+    total_chunks = floor(len_all_freqs / max_freq_write)
+    modulo = len_all_freqs % max_freq_write
+    if modulo > 0:
+        total_chunks += 1
+    logger("write_data: Frequency chunk size = {}, total chunks = {}"
+           .format(max_freq_write, total_chunks))
     elapsed_time = 0.0
-    for ndx in tqdm(range(arg_fbobj.t_begin, arg_fbobj.t_end),
-                    desc="Writing ...", unit=" (channel-blocks)"):
-        signal = get_signal(freqs, elapsed_time,
-                            arg_fbobj.signal_low, arg_fbobj.signal_high)
+    for ndx_t in tqdm(range(arg_fbobj.t_begin, arg_fbobj.t_end),
+                      desc="Write-progress", unit =" ticks"):
+
+        fbegin = arg_fbobj.header["fch1"]
+        fcount = max_freq_write
+        nchunks = total_chunks
         if DEBUGGING:
-            print("\nDEBUG low={}, high={}, signal:\n{}"
-                  .format(arg_fbobj.signal_low, arg_fbobj.signal_high, signal))
-        rfactor = np.random.uniform(-0.5, 0.5, len_freqs)
-        noisy64 = get_noisy(signal, arg_fbobj.max_noise, rfactor)
-        if DEBUGGING:
-            print("DEBUG noisy64:", noisy64)
-        if n_bytes == 4:
-            noisy = np.float32(noisy64)
-        elif n_bytes == 2:
-            noisy = np.int16(noisy64)
-        elif n_bytes == 1:
-            noisy = np.int8(noisy64)
-        else:
-            oops("write_data: write({}) block #{} failed, invalid n_bytes parameter: {}"
-                 .format(ndx, out_path, n_bytes))
-        try:
-            out_fwobj.write(noisy)
-        except Exception as err:
-            oops("write_data: write({}) block #{} failed, reason: {}"
-                 .format(ndx, out_path, repr(err)))
-        elapsed_time += tsamp
+            print("\nDEBUG before inner loop: fbegin = {}, fcount = {}, nchunks = {}"
+                  .format(fbegin, fcount, nchunks))
+
+        while nchunks > 0:
+            if nchunks == 1 and modulo > 0:
+                fcount = modulo
+            freqs = generate_freqs_hz(fbegin, fcount, foff)
+            signal = get_signal(freqs, elapsed_time,
+                                arg_fbobj.signal_low, arg_fbobj.signal_high)
+            rfactor = np.random.uniform(-0.5, 0.5, len(freqs))
+            noisy64 = get_noisy(signal, arg_fbobj.max_noise, rfactor)
+            if n_bytes == 4:
+                noisy = np.float32(noisy64)
+            elif n_bytes == 2:
+                noisy = np.int16(noisy64)
+            elif n_bytes == 1:
+                noisy = np.int8(noisy64)
+            else:
+                oops("write_data: write({}) block #{} failed, invalid n_bytes parameter: {}"
+                     .format(ndx_t, out_path, n_bytes))
+            try:
+                out_fwobj.write(noisy)
+            except Exception as err:
+                oops("write_data: write({}) block #{} failed, reason: {}"
+                     .format(ndx_t, out_path, repr(err)))
+            fbegin += foff * fcount
+            nchunks -= 1
+
+        elapsed_time += tsamp # end of the ndx_t loop
+
     print("\n")
 
 if __name__ == "__main__":
