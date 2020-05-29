@@ -2,59 +2,57 @@
 gendata configuration object source file
 """
 
-from math import floor
 import os
 import configparser
 from astropy.time import Time
 from blimpy.io.sigproc import header_keyword_types
-from astropy import units as u
+import astropy.units as u
 from astropy.coordinates import Angle
 from fbgen_utilities import logger, oops
 
+def get_config_string(arg_config, arg_section, arg_key):
+    """
+    get one STRING configuration parameter by key
+    """
+    parm_value = "?"
+    try:
+        parm_value = arg_config.get(arg_section, arg_key)
+    except Exception as err:
+        oops("get_config_string: config file key {}, reason: {}"
+             .format(arg_key, repr(err)))
+    logger("get_config_string: {} = {}".format(arg_key, parm_value))
+    return parm_value
+
+def get_config_int(arg_config, arg_section, arg_key):
+    """
+    get one INTEGER configuration parameter by key
+    """
+    parm_value = -1
+    try:
+        parm_value = arg_config.getint(arg_section, arg_key)
+    except Exception as err:
+        oops("get_config_int: config file key {}, reason: {}"
+             .format(arg_key, repr(err)))
+    logger("get_config_int: {} = {}".format(arg_key, parm_value))
+    return parm_value
+
+def get_config_float(arg_config, arg_section, arg_key):
+    """
+    get one FLOAT configuration parameter by key
+    """
+    parm_value = -1.0
+    try:
+        parm_value = arg_config.getfloat(arg_section, arg_key)
+    except Exception as err:
+        oops("get_config_float: config file key {}, reason: {}"
+             .format(arg_key, repr(err)))
+    logger("get_config_float: {} = {}".format(arg_key, parm_value))
+    return parm_value
 
 class FilterbankObject:
     """
     Class definition for the configuration object.
     """
-
-    def get_config_string(self, arg_config, arg_section, arg_key):
-        """
-        get one STRING configuration parameter by key
-        """
-        parm_value = "?"
-        try:
-            parm_value = arg_config.get(arg_section, arg_key)
-        except Exception as err:
-            oops("get_config_string: config file key {}, reason: {}"
-                 .format(arg_key, repr(err)))
-        logger("get_config_string: {} = {}".format(arg_key, parm_value))
-        return parm_value
-
-    def get_config_int(self, arg_config, arg_section, arg_key):
-        """
-        get one INTEGER configuration parameter by key
-        """
-        parm_value = -1
-        try:
-            parm_value = arg_config.getint(arg_section, arg_key)
-        except Exception as err:
-            oops("get_config_int: config file key {}, reason: {}"
-                 .format(arg_key, repr(err)))
-        logger("get_config_int: {} = {}".format(arg_key, parm_value))
-        return parm_value
-
-    def get_config_float(self, arg_config, arg_section, arg_key):
-        """
-        get one FLOAT configuration parameter by key
-        """
-        parm_value = -1.0
-        try:
-            parm_value = arg_config.getfloat(arg_section, arg_key)
-        except Exception as err:
-            oops("get_config_float: config file key {}, reason: {}"
-                 .format(arg_key, repr(err)))
-        logger("get_config_float: {} = {}".format(arg_key, parm_value))
-        return parm_value
 
     def __init__(self, arg_config_path, arg_out_path):
         """
@@ -75,11 +73,11 @@ class FilterbankObject:
 
         # Hard-coded parameter values that might be configured in the future:
         try:
-            nsamples = self.get_config_int(config, section, "nsamples")
-            tstart_iso = self.get_config_string(config, section, "tstart_iso")
-            foff = self.get_config_float(config, section, "foff")
-            fch1 = self.get_config_float(config, section, "fch1")
-            nchans = self.get_config_int(config, section, "nchans")
+            nsamples = get_config_int(config, section, "nsamples")
+            tstart_iso = get_config_string(config, section, "tstart_iso")
+            foff = get_config_float(config, section, "foff")
+            fch1 = get_config_float(config, section, "fch1")
+            nchans = get_config_int(config, section, "nchans")
 
             self.t_begin = 0
             self.t_end = nsamples
@@ -95,7 +93,7 @@ class FilterbankObject:
                 'data_type': 1,    # blimpy
                 'nchans': nchans,
                 'ibeam': 1,
-                'tsamp': self.get_config_float(config, section, "tsamp"),
+                'tsamp': get_config_float(config, section, "tsamp"),
                 'foff': foff,
                 'src_raj': Angle("17:10:03.984", unit=u.hour),  # right ascension (J2000) of source
                 'src_dej': Angle("12:10:58.8", unit=u.deg),  # declination (J2000) of source
@@ -105,41 +103,24 @@ class FilterbankObject:
                 'za_start': 0.0, # telescope zenith angle at start (degrees)
                 'rawdatafile': "N/A",  # no related guppi file
                 'nifs': 1,
-                'nbits': 32
+                'nbits': get_config_int(config, section, "nbits")
             })
             self.header = whdr
 
-            self.file_size_bytes = 0
-            self.idx_data = 0
-            self.n_channels_in_file = nchans
-            self.n_beams_in_file = self.header['nbeams']
-            self.n_pols_in_file = 1
-            self.n_bytes = floor(self.header['nbits'] / 8)
-            self.d_type = 'float32'
-            self.n_ints_in_file = self.t_end
-            self.file_shape = (self.t_end, 1, nchans)
+            if self.header['nbits'] in {8, 16, 32}:
+                pass
+            else:
+                oops("get_config: {} nbits must be 8, 16, or 32"
+                     .format(arg_config_path))
             if foff < 0:
                 self.f_begin = fch1 + nchans * foff
                 self.f_end = fch1
             else:
                 self.f_begin = fch1
                 self.f_end = fch1 + nchans * foff
-            self.t_start = self.t_begin
-            self.t_stop = self.t_end
-            self.f_start = self.f_begin
-            self.f_stop = self.f_end
-            self.selection_shape = self.file_shape
-            self.chan_start_idx = 0
-            self.chan_stop_idx = nchans
-            self.load_data = False
-            self.freq_axis = 2
-            self.time_axis = 0
-            self.beam_axis = 1
-            self.MAX_DATA_ARRAY_SIZE = 0
-            self.large_file = True
-            self.signal_low = self.get_config_float(config, section, "signal_low")
-            self.signal_high = self.get_config_float(config, section, "signal_high")
-            self.max_noise = self.get_config_float(config, section, "max_noise")
+            self.signal_low = get_config_float(config, section, "signal_low")
+            self.signal_high = get_config_float(config, section, "signal_high")
+            self.max_noise = get_config_float(config, section, "max_noise")
 
         except Exception as err:
             oops("get_config: Trouble with config file {}, reason: {}"
@@ -148,7 +129,7 @@ class FilterbankObject:
 
 
 if __name__ == "__main__":
-    fbobj = FilterbankObject("fbgen.cfg", "/tmp/xx.fil")
+    fbobj = FilterbankObject("dfg_tiny.float32.cfg", "/tmp/xx.fil")
     print("\nDump of the Filterbank object follows:")
     print(vars(fbobj))
     print("\nt_begin:\n", fbobj.t_begin)
