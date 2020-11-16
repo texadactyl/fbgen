@@ -71,7 +71,6 @@ class FilterbankObject:
             oops("get_config: Trouble loading config file {}, reason: {}"
                  .format(arg_config_path, repr(err)))
 
-        # Hard-coded parameter values that might be configured in the future:
         try:
             nsamples = get_config_int(config, section, "nsamples")
             tstart_iso = get_config_string(config, section, "tstart_iso")
