@@ -1,5 +1,5 @@
 """
-gendata configuration object source file
+fbgen configuration object source file
 """
 
 import os
